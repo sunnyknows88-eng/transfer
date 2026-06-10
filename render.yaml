@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: mini-transfer-sh
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    disk:
+      name: uploads-disk
+      mountPath: /var/lib/uploads
+      sizeGB: 1
+    envVars:
+      - key: UPLOAD_DIR
+        value: /var/lib/uploads
+      - key: MAX_FILE_SIZE
+        value: "536870912"
+      - key: FILE_EXPIRY_HOURS
+        value: "24"
+      - key: RATE_LIMIT_PER_MINUTE
+        value: "60"
+      - key: PYTHON_VERSION
+        value: "3.12.0"
