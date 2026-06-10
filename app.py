@@ -38,8 +38,26 @@ app = Flask(__name__)
 app.config["UPLOAD_DIR"] = UPLOAD_DIR
 app.config["MAX_CONTENT_LENGTH"] = MAX_FILE_SIZE  # Also sets Flask's built-in body size check
 
-# Initialize Storage Provider
-storage = LocalStorageProvider(UPLOAD_DIR)
+# Initialize Storage Provider (Local Filesystem or S3-Compatible Storage)
+S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
+S3_ACCESS_KEY_ID = os.getenv("S3_ACCESS_KEY_ID")
+S3_SECRET_ACCESS_KEY = os.getenv("S3_SECRET_ACCESS_KEY")
+S3_ENDPOINT_URL = os.getenv("S3_ENDPOINT_URL")
+S3_REGION_NAME = os.getenv("S3_REGION_NAME")
+
+if S3_BUCKET_NAME and S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY:
+    logger.info("Initializing S3StorageProvider as storage backend...")
+    from storage import S3StorageProvider
+    storage = S3StorageProvider(
+        bucket_name=S3_BUCKET_NAME,
+        access_key_id=S3_ACCESS_KEY_ID,
+        secret_access_key=S3_SECRET_ACCESS_KEY,
+        endpoint_url=S3_ENDPOINT_URL,
+        region_name=S3_REGION_NAME
+    )
+else:
+    logger.info("Initializing LocalStorageProvider as storage backend...")
+    storage = LocalStorageProvider(UPLOAD_DIR)
 
 
 # Rate Limiter implementation
@@ -285,19 +303,15 @@ def upload_file(filename: str):
     # Dynamic check via custom SizeLimitingStream wrapper (handles chunked uploads correctly)
     limiting_stream = SizeLimitingStream(request.stream, MAX_FILE_SIZE)
 
+    # Calculate MIME type
+    mimetype, _ = mimetypes.guess_type(safe_filename)
+    if not mimetype:
+        mimetype = request.content_type or "application/octet-stream"
+
     try:
-        file_id, saved_filename, metadata = storage.save_file(safe_filename, limiting_stream)
-        
-        # Calculate MIME type
-        mimetype, _ = mimetypes.guess_type(saved_filename)
-        if not mimetype:
-            mimetype = request.content_type or "application/octet-stream"
-            
-        # Update metadata content-type
-        metadata["content_type"] = mimetype
-        _, metadata_path = storage._get_paths(saved_filename, file_id)
-        with open(metadata_path, "w", encoding="utf-8") as f:
-            json.dump(metadata, f, indent=2)
+        file_id, saved_filename, metadata = storage.save_file(
+            safe_filename, limiting_stream, content_type=mimetype
+        )
 
         # Generate download URL mapping
         url_subpath = f"{file_id}/{saved_filename}" if file_id else saved_filename
