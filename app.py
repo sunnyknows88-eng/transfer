@@ -207,6 +207,21 @@ def health_check():
     return jsonify({"status": "ok"}), 200
 
 
+@app.route("/debug-storage", methods=["GET"])
+def debug_storage():
+    """Debug route to check active storage provider and env vars presence."""
+    return jsonify({
+        "active_provider": storage.__class__.__name__,
+        "env_vars_detected": {
+            "S3_BUCKET_NAME": bool(os.getenv("S3_BUCKET_NAME")),
+            "S3_ACCESS_KEY_ID": bool(os.getenv("S3_ACCESS_KEY_ID")),
+            "S3_SECRET_ACCESS_KEY": bool(os.getenv("S3_SECRET_ACCESS_KEY")),
+            "S3_ENDPOINT_URL": bool(os.getenv("S3_ENDPOINT_URL")),
+            "S3_REGION_NAME": bool(os.getenv("S3_REGION_NAME"))
+        }
+    }), 200
+
+
 @app.route("/info/<filename>", methods=["GET"])
 def info_direct(filename: str):
     """Retrieves metadata for a file in the root upload directory."""
