@@ -9,10 +9,12 @@ try:
     import boto3
     from botocore.exceptions import ClientError
     from botocore.config import Config
+    from boto3.s3.transfer import TransferConfig
 except ImportError:
     boto3 = None
     ClientError = None
     Config = None
+    TransferConfig = None
 
 
 class StorageProvider:
@@ -235,8 +237,10 @@ class S3StorageProvider(StorageProvider):
         # We need to read/buffer the stream as S3 upload_fileobj reads chunks.
         # SizeLimitingStream will raise ValueError if size limit is exceeded during upload.
         try:
+            # Disable multi-threading for streaming WSGI requests to avoid hangs
+            config = TransferConfig(use_threads=False)
             # We upload directly from the stream. Boto3's upload_fileobj handles multi-threading/chunking.
-            self.s3_client.upload_fileobj(stream, self.bucket_name, file_key)
+            self.s3_client.upload_fileobj(stream, self.bucket_name, file_key, Config=config)
         except Exception as e:
             # If upload fails mid-way, ensure any partial file is deleted in S3
             try:

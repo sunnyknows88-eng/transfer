@@ -9,7 +9,7 @@ import threading
 from collections import defaultdict
 from typing import BinaryIO, Optional
 
-from flask import Flask, request, send_file, jsonify, abort
+from flask import Flask, request, send_file, jsonify, abort, Response
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 
@@ -252,6 +252,21 @@ def download_with_id(file_id: str, filename: str):
     return perform_download(filename, file_id)
 
 
+def generate_chunks(stream_obj):
+    """Yields chunks of the stream safely and ensures it is closed afterwards."""
+    try:
+        while True:
+            chunk = stream_obj.read(8192)
+            if not chunk:
+                break
+            yield chunk
+    finally:
+        try:
+            stream_obj.close()
+        except Exception:
+            pass
+
+
 def perform_download(filename: str, file_id: Optional[str]):
     """Common helper to retrieve and stream files."""
     try:
@@ -273,13 +288,16 @@ def perform_download(filename: str, file_id: Optional[str]):
         mimetype, _ = mimetypes.guess_type(display_name)
         mimetype = mimetype or "application/octet-stream"
 
-    # Stream the file content back to the client using send_file.
-    # We specify as_attachment=True to trigger download headers.
-    return send_file(
-        stream,
+    # Stream the file content manually using a generator.
+    # This avoids seek/tell issues on R2's non-seekable botocore StreamingBody streams.
+    headers = {
+        "Content-Disposition": f'attachment; filename="{display_name}"',
+        "Content-Length": str(size)
+    }
+    return Response(
+        generate_chunks(stream),
         mimetype=mimetype,
-        as_attachment=True,
-        download_name=display_name
+        headers=headers
     )
 
 
